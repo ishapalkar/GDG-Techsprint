@@ -9,6 +9,8 @@ import Stats from './pages/Stats'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import Profile from './pages/Profile'
+import ResumeUpload from './pages/ResumeUpload'
+import ProfileSummary from './pages/ProfileSummary'
 import InterviewSetup from './pages/InterviewSetup'
 import InterviewScreen from './pages/InterviewScreen'
 import InterviewResults from './pages/InterviewResults'
@@ -40,6 +42,8 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/resume-upload" element={<ResumeUpload />} />
+          <Route path="/profile-summary" element={<ProfileSummary />} />
           <Route path="/interview-setup" element={<InterviewSetup />} />
           <Route path="/interview" element={<InterviewScreen />} />
           <Route path="/interview-results" element={<InterviewResults />} />

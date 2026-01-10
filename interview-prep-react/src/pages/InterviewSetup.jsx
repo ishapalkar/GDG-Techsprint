@@ -1,46 +1,75 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Code, MessageSquare, Database, Brain, Briefcase, FileText, Target, Rocket } from 'lucide-react'
+import { Target, TrendingUp, Code, Rocket } from 'lucide-react'
 import Navbar from '../components/Navbar'
 
 export default function InterviewSetup() {
   const navigate = useNavigate()
   const [step, setStep] = useState(1)
   const [config, setConfig] = useState({
+    goal: '',
+    level: '',
     domain: '',
-    jobDescription: '',
-    interviewType: '',
-    structure: '',
-    difficulty: 'medium'
+    companyStyle: 'General'
   })
 
+
+  const goals = [
+    { 
+      id: 'full', 
+      name: 'Full Technical Interview', 
+      desc: 'Complete interview with all rounds (45-60 min)',
+      icon: '🎯'
+    },
+    { 
+      id: 'focused', 
+      name: 'Focused Practice', 
+      desc: 'Practice specific skills and topics (20-30 min)',
+      icon: '🎓'
+    },
+    { 
+      id: 'quick', 
+      name: 'Quick Mock', 
+      desc: 'Fast practice session (15 min)',
+      icon: '⚡'
+    }
+  ]
+
+  const levels = [
+    { id: 'internship', name: 'Internship', desc: 'Entry-level basics and fundamentals' },
+    { id: 'entry', name: 'Entry-level', desc: 'Junior developer positions' },
+    { id: 'mid', name: 'Mid-level', desc: 'Experienced developer roles' }
+  ]
+
   const domains = [
-    'Software Engineering', 'Data Science', 'Product Management', 
-    'DevOps', 'Frontend Development', 'Backend Development',
-    'Full Stack', 'Machine Learning', 'Mobile Development', 'Other'
+    { id: 'dsa', name: 'DSA', desc: 'Data Structures & Algorithms' },
+    { id: 'web', name: 'Web / Backend', desc: 'Full-stack or backend development' },
+    { id: 'ml', name: 'ML / Data', desc: 'Machine Learning & Data Science' },
+    { id: 'core', name: 'Core CS', desc: 'Computer Science fundamentals' }
   ]
 
-  const interviewTypes = [
-    { id: 'technical', name: 'Technical Coding', icon: Code, desc: 'Algorithms, data structures, problem solving' },
-    { id: 'behavioral', name: 'Behavioral', icon: MessageSquare, desc: 'STAR method, communication, experience' },
-    { id: 'system-design', name: 'System Design', icon: Database, desc: 'Architecture, scalability, trade-offs' },
-    { id: 'frontend', name: 'Frontend Round', icon: Code, desc: 'React, CSS, JavaScript, UI/UX' },
-    { id: 'backend', name: 'Backend Round', icon: Database, desc: 'APIs, databases, server architecture' },
-    { id: 'ml', name: 'ML/AI Round', icon: Brain, desc: 'Models, algorithms, data pipelines' },
-  ]
-
-  const structures = [
-    { id: 'google', name: 'Google Style', desc: 'Focus on algorithms, system design, and Googleyness' },
-    { id: 'meta', name: 'Meta Style', desc: 'Behavioral, coding, and system design balanced' },
-    { id: 'amazon', name: 'Amazon Style', desc: 'Leadership principles and bar raiser approach' },
-    { id: 'microsoft', name: 'Microsoft Style', desc: 'Technical depth with collaboration focus' },
-    { id: 'startup', name: 'Startup Style', desc: 'Practical skills, culture fit, quick decision' },
-    { id: 'custom', name: 'Custom Structure', desc: 'Create your own interview flow' },
+  const companyStyles = [
+    { id: 'General', name: 'General', desc: 'Standard interview format for most companies' },
+    { id: 'Google', name: 'Google', desc: 'Focus on algorithms and problem-solving depth' },
+    { id: 'Amazon', name: 'Amazon', desc: 'Leadership principles and behavioral focus' },
+    { id: 'Microsoft', name: 'Microsoft', desc: 'Technical depth with collaboration emphasis' },
+    { id: 'Meta', name: 'Meta', desc: 'Product thinking and system design balanced' },
+    { id: 'Startup', name: 'Startup', desc: 'Practical skills and quick decision-making' }
   ]
 
   const handleStart = () => {
-    localStorage.setItem('interviewConfig', JSON.stringify(config))
+    const profileData = localStorage.getItem('profileData')
+    const interviewRole = localStorage.getItem('interviewRole')
+    
+    const interviewConfig = {
+      ...config,
+      profileData: profileData ? JSON.parse(profileData) : null,
+      interviewRole: interviewRole || 'Software Engineer',
+      createdAt: new Date().toISOString()
+    }
+    
+    localStorage.setItem('interviewConfig', JSON.stringify(interviewConfig))
     navigate('/interview')
   }
 
@@ -55,7 +84,7 @@ export default function InterviewSetup() {
           className="text-center mb-8"
         >
           <h1 className="text-6xl font-hand font-bold text-gray-900 mb-2">
-            Setup Your Interview
+            Interview Setup
           </h1>
           <p className="text-xl font-comic text-gray-600">
             Step {step} of 4
@@ -74,7 +103,7 @@ export default function InterviewSetup() {
           </div>
         </div>
 
-        {/* Step 1: Domain */}
+        {/* Step 1: Interview Goal */}
         {step === 1 && (
           <motion.div
             initial={{ opacity: 0, x: 30 }}
@@ -85,42 +114,50 @@ export default function InterviewSetup() {
               <div className="flex items-center gap-3 mb-6">
                 <Target className="w-8 h-8 text-black" />
                 <h2 className="text-3xl font-hand font-bold text-gray-900">
-                  Select Your Domain
+                  Choose Your Goal
                 </h2>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mb-6">
-                {domains.map((domain) => (
+              <div className="space-y-4 mb-6">
+                {goals.map((goal) => (
                   <motion.button
-                    key={domain}
-                    onClick={() => setConfig({...config, domain})}
-                    className={`p-4 rounded-lg border-4 font-bold text-left transition-all ${
-                      config.domain === domain 
+                    key={goal.id}
+                    onClick={() => setConfig({...config, goal: goal.id})}
+                    className={`w-full p-6 rounded-lg border-4 text-left transition-all ${
+                      config.goal === goal.id 
                         ? 'bg-black text-white border-black' 
                         : 'bg-white text-black border-black hover:bg-gray-100'
                     }`}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                   >
-                    {domain}
+                    <div className="flex items-start gap-4">
+                      <div className="text-4xl">{goal.icon}</div>
+                      <div className="flex-1">
+                        <p className="font-bold text-xl mb-1">{goal.name}</p>
+                        <p className={`text-sm ${
+                          config.goal === goal.id ? 'text-gray-300' : 'text-gray-600'
+                        }`}>{goal.desc}</p>
+                      </div>
+                    </div>
                   </motion.button>
                 ))}
               </div>
 
               <motion.button
                 onClick={() => setStep(2)}
-                disabled={!config.domain}
+                disabled={!config.goal}
                 className="w-full btn-sketch bg-black text-white py-4 text-xl disabled:opacity-50 disabled:cursor-not-allowed"
-                whileHover={{ scale: config.domain ? 1.02 : 1 }}
-                whileTap={{ scale: config.domain ? 0.98 : 1 }}
+                whileHover={{ scale: config.goal ? 1.02 : 1 }}
+                whileTap={{ scale: config.goal ? 0.98 : 1 }}
               >
-                Next: Job Description →
+                Next: Target Level →
               </motion.button>
             </div>
           </motion.div>
         )}
 
-        {/* Step 2: Job Description */}
+        {/* Step 2: Target Level */}
         {step === 2 && (
           <motion.div
             initial={{ opacity: 0, x: 30 }}
@@ -129,22 +166,32 @@ export default function InterviewSetup() {
           >
             <div className="card-sketch">
               <div className="flex items-center gap-3 mb-6">
-                <FileText className="w-8 h-8 text-black" />
+                <TrendingUp className="w-8 h-8 text-black" />
                 <h2 className="text-3xl font-hand font-bold text-gray-900">
-                  Job Description (Optional)
+                  Target Level
                 </h2>
               </div>
 
-              <p className="text-gray-600 font-bold mb-4">
-                Paste the job description to get tailored interview questions
-              </p>
-
-              <textarea
-                value={config.jobDescription}
-                onChange={(e) => setConfig({...config, jobDescription: e.target.value})}
-                className="w-full h-48 p-4 border-4 border-black rounded-lg font-comic text-lg focus:outline-none focus:ring-4 focus:ring-gray-400 mb-6"
-                placeholder="Paste job description here or skip this step..."
-              />
+              <div className="space-y-4 mb-6">
+                {levels.map((level) => (
+                  <motion.button
+                    key={level.id}
+                    onClick={() => setConfig({...config, level: level.id})}
+                    className={`w-full p-6 rounded-lg border-4 text-left transition-all ${
+                      config.level === level.id 
+                        ? 'bg-black text-white border-black' 
+                        : 'bg-white text-black border-black hover:bg-gray-100'
+                    }`}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <p className="font-bold text-xl mb-1">{level.name}</p>
+                    <p className={`text-sm ${
+                      config.level === level.id ? 'text-gray-300' : 'text-gray-600'
+                    }`}>{level.desc}</p>
+                  </motion.button>
+                ))}
+              </div>
 
               <div className="flex gap-3">
                 <motion.button
@@ -157,18 +204,19 @@ export default function InterviewSetup() {
                 </motion.button>
                 <motion.button
                   onClick={() => setStep(3)}
-                  className="flex-1 btn-sketch bg-black text-white py-4 text-xl"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                  disabled={!config.level}
+                  className="flex-1 btn-sketch bg-black text-white py-4 text-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                  whileHover={{ scale: config.level ? 1.02 : 1 }}
+                  whileTap={{ scale: config.level ? 0.98 : 1 }}
                 >
-                  Next: Interview Type →
+                  Next: Primary Domain →
                 </motion.button>
               </div>
             </div>
           </motion.div>
         )}
 
-        {/* Step 3: Interview Type */}
+        {/* Step 3: Primary Domain */}
         {step === 3 && (
           <motion.div
             initial={{ opacity: 0, x: 30 }}
@@ -177,36 +225,29 @@ export default function InterviewSetup() {
           >
             <div className="card-sketch">
               <div className="flex items-center gap-3 mb-6">
-                <Briefcase className="w-8 h-8 text-black" />
+                <Code className="w-8 h-8 text-black" />
                 <h2 className="text-3xl font-hand font-bold text-gray-900">
-                  Choose Interview Type
+                  Primary Domain
                 </h2>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                {interviewTypes.map((type) => (
+              <div className="space-y-4 mb-6">
+                {domains.map((domain) => (
                   <motion.button
-                    key={type.id}
-                    onClick={() => setConfig({...config, interviewType: type.id})}
-                    className={`p-4 rounded-lg border-4 text-left transition-all ${
-                      config.interviewType === type.id 
+                    key={domain.id}
+                    onClick={() => setConfig({...config, domain: domain.id})}
+                    className={`w-full p-6 rounded-lg border-4 text-left transition-all ${
+                      config.domain === domain.id 
                         ? 'bg-black text-white border-black' 
                         : 'bg-white text-black border-black hover:bg-gray-100'
                     }`}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                   >
-                    <div className="flex items-start gap-3">
-                      <type.icon className={`w-6 h-6 flex-shrink-0 ${
-                        config.interviewType === type.id ? 'text-white' : 'text-black'
-                      }`} />
-                      <div>
-                        <p className="font-bold text-lg mb-1">{type.name}</p>
-                        <p className={`text-sm ${
-                          config.interviewType === type.id ? 'text-gray-300' : 'text-gray-600'
-                        }`}>{type.desc}</p>
-                      </div>
-                    </div>
+                    <p className="font-bold text-xl mb-1">{domain.name}</p>
+                    <p className={`text-sm ${
+                      config.domain === domain.id ? 'text-gray-300' : 'text-gray-600'
+                    }`}>{domain.desc}</p>
                   </motion.button>
                 ))}
               </div>
@@ -222,19 +263,19 @@ export default function InterviewSetup() {
                 </motion.button>
                 <motion.button
                   onClick={() => setStep(4)}
-                  disabled={!config.interviewType}
+                  disabled={!config.domain}
                   className="flex-1 btn-sketch bg-black text-white py-4 text-xl disabled:opacity-50 disabled:cursor-not-allowed"
-                  whileHover={{ scale: config.interviewType ? 1.02 : 1 }}
-                  whileTap={{ scale: config.interviewType ? 0.98 : 1 }}
+                  whileHover={{ scale: config.domain ? 1.02 : 1 }}
+                  whileTap={{ scale: config.domain ? 0.98 : 1 }}
                 >
-                  Next: Structure →
+                  Next: Company Style →
                 </motion.button>
               </div>
             </div>
           </motion.div>
         )}
 
-        {/* Step 4: Structure */}
+        {/* Step 4: Company Style */}
         {step === 4 && (
           <motion.div
             initial={{ opacity: 0, x: 30 }}
@@ -245,52 +286,33 @@ export default function InterviewSetup() {
               <div className="flex items-center gap-3 mb-6">
                 <Rocket className="w-8 h-8 text-black" />
                 <h2 className="text-3xl font-hand font-bold text-gray-900">
-                  Interview Structure
+                  Company Style (Optional)
                 </h2>
               </div>
 
+              <p className="text-gray-600 font-bold mb-6">
+                Choose an interview style or keep it General
+              </p>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                {structures.map((structure) => (
+                {companyStyles.map((company) => (
                   <motion.button
-                    key={structure.id}
-                    onClick={() => setConfig({...config, structure: structure.id})}
-                    className={`p-4 rounded-lg border-4 text-left transition-all ${
-                      config.structure === structure.id 
+                    key={company.id}
+                    onClick={() => setConfig({...config, companyStyle: company.id})}
+                    className={`p-6 rounded-lg border-4 text-left transition-all ${
+                      config.companyStyle === company.id 
                         ? 'bg-black text-white border-black' 
                         : 'bg-white text-black border-black hover:bg-gray-100'
                     }`}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                   >
-                    <p className="font-bold text-lg mb-1">{structure.name}</p>
+                    <p className="font-bold text-xl mb-1">{company.name}</p>
                     <p className={`text-sm ${
-                      config.structure === structure.id ? 'text-gray-300' : 'text-gray-600'
-                    }`}>{structure.desc}</p>
+                      config.companyStyle === company.id ? 'text-gray-300' : 'text-gray-600'
+                    }`}>{company.desc}</p>
                   </motion.button>
                 ))}
-              </div>
-
-              <div className="mb-6">
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  Difficulty Level
-                </label>
-                <div className="flex gap-3">
-                  {['easy', 'medium', 'hard'].map((level) => (
-                    <motion.button
-                      key={level}
-                      onClick={() => setConfig({...config, difficulty: level})}
-                      className={`flex-1 py-3 rounded-lg border-4 font-bold capitalize ${
-                        config.difficulty === level 
-                          ? 'bg-black text-white border-black' 
-                          : 'bg-white text-black border-black hover:bg-gray-100'
-                      }`}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      {level}
-                    </motion.button>
-                  ))}
-                </div>
               </div>
 
               <div className="flex gap-3">
@@ -304,10 +326,9 @@ export default function InterviewSetup() {
                 </motion.button>
                 <motion.button
                   onClick={handleStart}
-                  disabled={!config.structure}
-                  className="flex-1 btn-sketch bg-black text-white py-4 text-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  whileHover={{ scale: config.structure ? 1.02 : 1 }}
-                  whileTap={{ scale: config.structure ? 0.98 : 1 }}
+                  className="flex-1 btn-sketch bg-black text-white py-4 text-xl flex items-center justify-center gap-2"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                 >
                   <Rocket className="w-6 h-6" />
                   Start Interview!

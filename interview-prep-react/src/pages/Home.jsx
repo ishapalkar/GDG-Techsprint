@@ -126,7 +126,7 @@ function HeroSection() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5, duration: 0.8 }}
           >
-            <Link to="/practice">
+            <Link to="/resume-upload">
               <motion.button
                 className="btn-sketch bg-black text-white text-xl px-12 flex items-center gap-3"
                 whileHover={{ scale: 1.05 }}
