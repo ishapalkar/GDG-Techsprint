@@ -1,20 +1,23 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { 
   Trophy, Clock, MessageCircle, TrendingUp, Target, 
   ArrowRight, Home, BarChart3, Award, Star, ThumbsUp, Lightbulb,
-  Camera, Activity, Smile, Zap, Brain, Repeat
+  Camera, Activity, Smile, Zap, Brain, Repeat, AlertTriangle, Eye, Shield
 } from 'lucide-react'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
 export default function InterviewResults() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [interviewData, setInterviewData] = useState(null)
+  const [aiAnalysis, setAiAnalysis] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [readinessScore, setReadinessScore] = useState(0)
   const [strengths, setStrengths] = useState([])
   const [improvements, setImprovements] = useState([])
-  const [cameraInsight, setCameraInsight] = useState(null)
-  const [stressMarkers, setStressMarkers] = useState([])
   const [nextRecommendation, setNextRecommendation] = useState(null)
 
   useEffect(() => {
@@ -27,6 +30,67 @@ export default function InterviewResults() {
     const interview = JSON.parse(data)
     setInterviewData(interview)
 
+    // Check if we have an analysis_id from the location state
+    const analysisId = location.state?.analysisId || interview.analysisId
+
+    if (analysisId) {
+      // Fetch real AI analysis from backend
+      fetchAIAnalysis(analysisId)
+    } else {
+      // Generate mock feedback if no AI analysis available
+      generateMockFeedback(interview)
+      setLoading(false)
+    }
+  }, [navigate, location])
+
+  const fetchAIAnalysis = async (analysisId) => {
+    try {
+      setLoading(true)
+      const response = await fetch(`${API_URL}/interview/analysis/${analysisId}/`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        setAiAnalysis(data)
+        
+        // Set readiness score from AI confidence
+        setReadinessScore(data.confidence_score || 70)
+        
+        // Process AI strengths and improvements
+        processAIFeedback(data)
+      } else {
+        console.error('Failed to fetch AI analysis')
+        generateMockFeedback(interviewData)
+      }
+    } catch (error) {
+      console.error('Error fetching AI analysis:', error)
+      generateMockFeedback(interviewData)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const processAIFeedback = (analysis) => {
+    // Process strengths from AI
+    const aiStrengths = analysis.strengths?.map((strength, idx) => ({
+      icon: [ThumbsUp, Star, Brain, Smile, Zap][idx % 5],
+      title: `Strength ${idx + 1}`,
+      desc: strength
+    })) || []
+    setStrengths(aiStrengths)
+
+    // Process improvements from AI
+    const aiImprovements = analysis.improvements?.map((improvement, idx) => ({
+      icon: [Lightbulb, Target, Activity, MessageCircle, TrendingUp][idx % 5],
+      title: `Improvement ${idx + 1}`,
+      desc: improvement
+    })) || []
+    setImprovements(aiImprovements)
+
+    // Generate next recommendation
+    generateNextRecommendation(interviewData, analysis.confidence_score)
+  }
+
+  const generateMockFeedback = (interview) => {
     // Calculate Interview Readiness Score (more realistic)
     const score = calculateReadinessScore(interview)
     setReadinessScore(score)
@@ -34,15 +98,9 @@ export default function InterviewResults() {
     // Generate strengths and improvements
     generateFeedback(interview, score)
     
-    // Generate camera-based insight
-    generateCameraInsight()
-    
-    // Generate stress markers for timeline
-    generateStressMarkers(interview)
-    
     // Generate next interview recommendation
     generateNextRecommendation(interview, score)
-  }, [navigate])
+  }
 
   const calculateReadinessScore = (interview) => {
     // Base score
@@ -339,100 +397,160 @@ export default function InterviewResults() {
           </motion.div>
         </div>
 
-        {/* Camera Insight */}
-        {cameraInsight && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.1 }}
-            className="card-sketch bg-gradient-to-r from-purple-50 to-pink-50 border-4 border-purple-400 p-6 mb-8"
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <Camera className="w-6 h-6 text-purple-600" />
-              <h2 className="text-2xl font-hand font-bold text-gray-900">Camera Analysis</h2>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center border-4 border-purple-400">
-                  <cameraInsight.icon className="w-8 h-8 text-purple-600" />
-                </div>
+        {/* AI Analysis Sections - Only show if we have real AI data */}
+        {aiAnalysis && (
+          <>
+            {/* Emotional & Confidence Analysis */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.1 }}
+              className="card-sketch bg-gradient-to-br from-purple-50 to-pink-50 p-8 mb-8 border-4 border-purple-500"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <Brain className="w-8 h-8 text-purple-600" />
+                <h2 className="text-3xl font-hand font-bold text-gray-900">AI Performance Analysis</h2>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <p className="text-lg font-bold text-gray-900">{cameraInsight.text}</p>
-                  <p className="text-sm text-gray-600 font-comic mt-1">Based on visual feedback analysis</p>
+                  <h3 className="font-bold text-lg mb-2 text-gray-900">Emotional Trend</h3>
+                  <p className="font-comic text-gray-700 bg-white p-4 rounded-lg border-2 border-purple-300">
+                    {aiAnalysis.emotion_trend}
+                  </p>
                 </div>
-              </div>
-              <div className={`text-4xl font-hand font-bold ${
-                cameraInsight.color === 'green' ? 'text-green-600' : 'text-gray-600'
-              }`}>
-                {cameraInsight.metric}
-              </div>
-            </div>
-          </motion.div>
-        )}
 
-        {/* Stress & Confidence Timeline */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.2 }}
-          className="card-sketch bg-white p-6 mb-8"
-        >
-          <div className="flex items-center gap-3 mb-6">
-            <Activity className="w-6 h-6 text-gray-700" />
-            <h2 className="text-2xl font-hand font-bold text-gray-900">Stress & Confidence Markers</h2>
-          </div>
-
-          <div className="relative">
-            {/* Timeline bar */}
-            <div className="h-2 bg-gray-200 rounded-full mb-8">
-              <div className="h-full bg-black rounded-full" style={{ width: '100%' }} />
-            </div>
-
-            {/* Markers */}
-            <div className="relative">
-              {stressMarkers.map((marker, idx) => (
-                <motion.div
-                  key={idx}
-                  initial={{ opacity: 0, scale: 0 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 1.3 + idx * 0.1 }}
-                  className="absolute"
-                  style={{ 
-                    left: `${(marker.time / duration) * 100}%`,
-                    top: '-48px'
-                  }}
-                >
-                  <div className="flex flex-col items-center">
-                    <div className={`w-4 h-4 rounded-full border-4 border-white ${
-                      marker.level === 'low' ? 'bg-green-500' :
-                      marker.level === 'medium' ? 'bg-yellow-500' :
-                      'bg-red-500'
-                    }`} />
-                    <div className="text-xs font-bold text-gray-700 mt-1 whitespace-nowrap">
-                      {marker.label}
+                <div>
+                  <h3 className="font-bold text-lg mb-2 text-gray-900">Confidence Score</h3>
+                  <div className="bg-white p-4 rounded-lg border-2 border-purple-300">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-5xl font-hand font-bold text-purple-600">
+                        {aiAnalysis.confidence_score}
+                      </span>
+                      <span className="text-2xl font-bold text-gray-600">/100</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3">
+                      <div
+                        className="bg-purple-600 h-3 rounded-full transition-all duration-1000"
+                        style={{ width: `${aiAnalysis.confidence_score}%` }}
+                      />
                     </div>
                   </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
+                </div>
 
-          <div className="flex justify-center gap-6 mt-8">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-green-500 rounded-full" />
-              <span className="text-sm font-bold text-gray-700">Low Stress</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-yellow-500 rounded-full" />
-              <span className="text-sm font-bold text-gray-700">Moderate</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-red-500 rounded-full" />
-              <span className="text-sm font-bold text-gray-700">High Stress</span>
-            </div>
-          </div>
-        </motion.div>
+                <div className="md:col-span-2">
+                  <h3 className="font-bold text-lg mb-2 text-gray-900">Communication Analysis</h3>
+                  <p className="font-comic text-gray-700 bg-white p-4 rounded-lg border-2 border-purple-300">
+                    {aiAnalysis.communication_analysis}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Integrity & Behavioral Analysis */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.2 }}
+              className="card-sketch bg-gradient-to-br from-yellow-50 to-orange-50 p-8 mb-8 border-4 border-orange-500"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <Shield className="w-8 h-8 text-orange-600" />
+                <h2 className="text-3xl font-hand font-bold text-gray-900">Behavioral Integrity Analysis</h2>
+              </div>
+
+              <div className="bg-yellow-100 border-2 border-yellow-500 rounded-lg p-4 mb-6 flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-yellow-700 mt-1 flex-shrink-0" />
+                <p className="text-sm font-comic text-gray-800">
+                  <strong>Disclaimer:</strong> These are behavioral observations only and should not be used as the sole basis for hiring decisions. 
+                  Integrity indicators are probabilistic, not deterministic.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white p-6 rounded-lg border-2 border-orange-300">
+                  <Eye className="w-10 h-10 text-orange-600 mb-3" />
+                  <h3 className="font-bold text-lg mb-2 text-gray-900">Eye Movement</h3>
+                  <p className="font-comic text-gray-700 text-sm">
+                    {aiAnalysis.eye_movement_pattern}
+                  </p>
+                </div>
+
+                <div className="bg-white p-6 rounded-lg border-2 border-orange-300">
+                  <Activity className="w-10 h-10 text-orange-600 mb-3" />
+                  <h3 className="font-bold text-lg mb-2 text-gray-900">Attention Level</h3>
+                  <div className={`inline-block px-4 py-2 rounded-full font-bold text-white ${
+                    aiAnalysis.attention_level === 'high' ? 'bg-green-500' :
+                    aiAnalysis.attention_level === 'moderate' ? 'bg-yellow-500' :
+                    'bg-red-500'
+                  }`}>
+                    {aiAnalysis.attention_level?.toUpperCase()}
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-lg border-2 border-orange-300">
+                  <AlertTriangle className="w-10 h-10 text-orange-600 mb-3" />
+                  <h3 className="font-bold text-lg mb-2 text-gray-900">Suspicion Risk</h3>
+                  <div className={`inline-block px-4 py-2 rounded-full font-bold text-white ${
+                    aiAnalysis.suspicion_risk === 'low' ? 'bg-green-500' :
+                    aiAnalysis.suspicion_risk === 'medium' ? 'bg-yellow-500' :
+                    'bg-red-500'
+                  }`}>
+                    {aiAnalysis.suspicion_risk?.toUpperCase()}
+                  </div>
+                  <p className="font-comic text-gray-700 text-sm mt-3">
+                    {aiAnalysis.integrity_notes}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Relative Ranking */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.3 }}
+              className="card-sketch bg-gradient-to-br from-blue-50 to-indigo-50 p-8 mb-8 border-4 border-blue-500"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <Trophy className="w-8 h-8 text-blue-600" />
+                <h2 className="text-3xl font-hand font-bold text-gray-900">Relative Ranking</h2>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white p-6 rounded-lg border-2 border-blue-300 text-center">
+                  <div className="text-6xl font-hand font-bold text-blue-600 mb-2">
+                    {aiAnalysis.ranking_position}
+                  </div>
+                  <div className="text-sm font-bold text-gray-600">Your Position</div>
+                </div>
+
+                <div className="bg-white p-6 rounded-lg border-2 border-blue-300 text-center">
+                  <div className="text-6xl font-hand font-bold text-gray-700 mb-2">
+                    {aiAnalysis.total_participants}
+                  </div>
+                  <div className="text-sm font-bold text-gray-600">Total Participants</div>
+                </div>
+
+                <div className="bg-white p-6 rounded-lg border-2 border-blue-300 text-center">
+                  <div className="text-3xl font-hand font-bold text-indigo-600 mb-2">
+                    {aiAnalysis.percentile_band}
+                  </div>
+                  <div className="text-sm font-bold text-gray-600">Performance Band</div>
+                </div>
+              </div>
+
+              <div className="mt-6 bg-white p-4 rounded-lg border-2 border-blue-300">
+                <p className="font-comic text-gray-700 text-center">
+                  {aiAnalysis.ranking_position === 1 ? '🏆 Congratulations! You ranked first among all participants!' :
+                   aiAnalysis.ranking_position <= 3 ? '🥈 Excellent performance! You\'re in the top tier.' :
+                   aiAnalysis.percentile_band?.includes('Top') ? '👍 Solid performance! Above average among peers.' :
+                   '💪 Keep practicing to improve your ranking!'}
+                </p>
+              </div>
+            </motion.div>
+          </>
+        )}
 
         {/* Next Interview Recommendation */}
         {nextRecommendation && (

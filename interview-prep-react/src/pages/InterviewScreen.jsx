@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Code, Palette, MessageCircle, StopCircle, Mic, MicOff, 
-  Video, Camera, Shield, Clock, Send, CheckCircle, AlertCircle
+  Video, Camera, Shield, Clock, Send, CheckCircle, AlertCircle, Brain
 } from 'lucide-react'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
 export default function InterviewScreen() {
   const navigate = useNavigate()
@@ -25,6 +27,13 @@ export default function InterviewScreen() {
   const [calibrationStep, setCalibrationStep] = useState(0) // 0: request, 1: preview, 2: calibration, 3: complete
   const [calibrationCountdown, setCalibrationCountdown] = useState(15)
   const [mediaStream, setMediaStream] = useState(null)
+  
+  // Recording state for AI analysis
+  const [mediaRecorder, setMediaRecorder] = useState(null)
+  const [recordedChunks, setRecordedChunks] = useState([])
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const recordedChunksRef = useRef([]) // Use ref to capture chunks in real-time
   
   const chatEndRef = useRef(null)
   const videoPreviewRef = useRef(null)
@@ -123,7 +132,135 @@ export default function InterviewScreen() {
       if (videoLiveRef.current && mediaStream) {
         videoLiveRef.current.srcObject = mediaStream
       }
+      // Start recording for AI analysis
+      startRecording()
     }, 1500)
+  }
+
+  const startRecording = () => {
+    if (!mediaStream) {
+      console.error('No media stream available for recording')
+      return
+    }
+
+    try {
+      // Reset chunks
+      recordedChunksRef.current = []
+      
+      const options = { mimeType: 'video/webm;codecs=vp8,opus' }
+      const recorder = new MediaRecorder(mediaStream, options)
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedChunksRef.current.push(event.data)
+          console.log(`📹 Captured chunk: ${event.data.size} bytes (total: ${recordedChunksRef.current.length} chunks)`)
+        }
+      }
+
+      recorder.onstop = () => {
+        console.log(`✅ Recording stopped. Total chunks: ${recordedChunksRef.current.length}`)
+        setRecordedChunks(recordedChunksRef.current)
+      }
+
+      recorder.start(1000) // Capture data every second
+      setMediaRecorder(recorder)
+      setIsRecording(true)
+      console.log('✅ Recording started for AI analysis')
+    } catch (error) {
+      console.error('Failed to start recording:', error)
+      alert('Failed to start recording. Please check browser permissions.')
+    }
+  }
+
+  const stopRecording = () => {
+    return new Promise((resolve) => {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.onstop = () => {
+          console.log('⏹️ Recording stopped')
+          resolve()
+        }
+        mediaRecorder.stop()
+        setIsRecording(false)
+      } else {
+        resolve()
+      }
+    })
+  }
+
+  const uploadRecordingForAnalysis = async () => {
+    // Use ref data directly since state might not be updated yet
+    const chunks = recordedChunksRef.current
+    
+    if (chunks.length === 0) {
+      console.error('No recorded data available')
+      alert('No recording data found. The interview was not recorded.')
+      return null
+    }
+
+    try {
+      setIsUploading(true)
+      setUploadProgress(10)
+
+      // Create blob from recorded chunks
+      const blob = new Blob(chunks, { type: 'video/webm' })
+      const file = new File([blob], `interview_${Date.now()}.webm`, { type: 'video/webm' })
+      
+      console.log(`📤 Uploading interview recording (${(file.size / 1024 / 1024).toFixed(2)} MB)...`)
+      console.log(`   Total chunks: ${chunks.length}`)
+      setUploadProgress(30)
+
+      // Get user UID from localStorage (Firebase auth)
+      const userStr = localStorage.getItem('user')
+      const user = userStr ? JSON.parse(userStr) : null
+      const uid = user?.uid || 'demo_user_123'
+
+      // Create FormData
+      const formData = new FormData()
+      formData.append('uid', uid)
+      formData.append('recording', file)
+      formData.append('participant_count', '1') // Solo interview
+
+      setUploadProgress(50)
+
+      // Upload to backend
+      const response = await fetch(`${API_URL}/interview/analyze/`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      setUploadProgress(80)
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        const errorMsg = errorData.error || 'Upload failed'
+        
+        // Check if it's a quota error
+        if (errorMsg.includes('quota') || errorMsg.includes('429')) {
+          throw new Error('QUOTA_EXCEEDED: Gemini API daily quota reached. Please try again tomorrow or upgrade your API plan.')
+        }
+        
+        throw new Error(errorMsg)
+      }
+
+      const data = await response.json()
+      setUploadProgress(100)
+      
+      console.log('✅ Analysis complete:', data)
+      return data.analysis_id
+    } catch (error) {
+      console.error('❌ Failed to upload recording:', error)
+      
+      // Show user-friendly message for quota errors
+      if (error.message.includes('QUOTA_EXCEEDED')) {
+        alert('⚠️ AI Analysis Quota Exceeded\n\nThe Gemini API free tier limit has been reached (20 requests/day).\n\nOptions:\n1. Wait and try tomorrow\n2. Upgrade your Gemini API plan at https://ai.google.dev/\n\nYour interview data has been saved locally.')
+      } else {
+        alert(`Failed to analyze interview: ${error.message}`)
+      }
+      
+      return null
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   const startInterview = () => {
@@ -199,7 +336,17 @@ export default function InterviewScreen() {
     }, 2000)
   }
 
-  const handleEndInterview = () => {
+  const handleEndInterview = async () => {
+    console.log('🛑 Ending interview...')
+    
+    // Stop recording and wait for it to finalize
+    await stopRecording()
+    
+    // Wait a moment for the onstop event to process
+    await new Promise(resolve => setTimeout(resolve, 500))
+    
+    console.log(`📊 Chunks captured: ${recordedChunksRef.current.length}`)
+    
     // Save interview data
     const interviewData = {
       config,
@@ -213,6 +360,16 @@ export default function InterviewScreen() {
       })),
       currentRound: interviewRounds[currentRound].name
     }
+    
+    // Upload recording for AI analysis
+    const analysisId = await uploadRecordingForAnalysis()
+    
+    // Add analysis ID to interview data
+    if (analysisId) {
+      interviewData.analysisId = analysisId
+      console.log(`✅ Analysis ID: ${analysisId}`)
+    }
+    
     localStorage.setItem('lastInterview', JSON.stringify(interviewData))
     
     // Cleanup camera
@@ -220,7 +377,7 @@ export default function InterviewScreen() {
       mediaStream.getTracks().forEach(track => track.stop())
     }
     
-    navigate('/interview-results')
+    navigate('/interview-results', { state: { analysisId } })
   }
 
   const formatTime = (seconds) => {
@@ -233,6 +390,55 @@ export default function InterviewScreen() {
 
   return (
     <>
+      {/* Upload Progress Overlay */}
+      <AnimatePresence>
+        {isUploading && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              className="bg-white rounded-2xl border-4 border-black max-w-md w-full p-8 text-center"
+            >
+              <div className="mb-6">
+                <div className="w-20 h-20 mx-auto mb-4 bg-purple-100 rounded-full flex items-center justify-center">
+                  <Brain className="w-10 h-10 text-purple-600 animate-pulse" />
+                </div>
+                <h2 className="text-3xl font-hand font-bold text-gray-900 mb-2">
+                  Analyzing Interview
+                </h2>
+                <p className="text-gray-600 font-comic">
+                  Gemini AI is analyzing your performance...
+                </p>
+              </div>
+
+              <div className="mb-4">
+                <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${uploadProgress}%` }}
+                    transition={{ duration: 0.5 }}
+                    className="h-full bg-gradient-to-r from-purple-500 to-pink-500"
+                  />
+                </div>
+                <p className="text-sm font-bold text-gray-700 mt-2">{uploadProgress}%</p>
+              </div>
+
+              <div className="text-xs text-gray-500 font-comic space-y-1">
+                {uploadProgress < 40 && <p>📤 Uploading interview recording...</p>}
+                {uploadProgress >= 40 && uploadProgress < 70 && <p>🤖 Analyzing emotions and voice patterns...</p>}
+                {uploadProgress >= 70 && uploadProgress < 90 && <p>👁️ Detecting eye movement and attention...</p>}
+                {uploadProgress >= 90 && <p>📊 Generating performance report...</p>}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Camera Consent & Calibration Overlay */}
       <AnimatePresence>
         {showCameraConsent && (
