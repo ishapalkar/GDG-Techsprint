@@ -4,9 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Code, Palette, MessageCircle, StopCircle, Mic, MicOff, 
   Video, Camera, Shield, Clock, Send, CheckCircle, AlertCircle, Brain
+  Volume2, VolumeX, Mic as MicIcon
 } from 'lucide-react'
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+import CodeEditor from '../components/CodeEditor'
 
 export default function InterviewScreen() {
   const navigate = useNavigate()
@@ -19,6 +19,21 @@ export default function InterviewScreen() {
   const [timeElapsed, setTimeElapsed] = useState(0)
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [currentRound, setCurrentRound] = useState(0)
+  
+  // TTS & STT states
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const [isListening, setIsListening] = useState(false)
+  const [isTTSEnabled, setIsTTSEnabled] = useState(true)
+  const [isMuted, setIsMuted] = useState(false)
+  const [transcript, setTranscript] = useState('')
+  const [interimTranscript, setInterimTranscript] = useState('')
+  const [isConversationMode, setIsConversationMode] = useState(true) // Auto-conversation mode
+  const [isWaitingForAI, setIsWaitingForAI] = useState(false)
+  const speechSynthesisRef = useRef(null)
+  const recognitionRef = useRef(null)
+  const silenceTimerRef = useRef(null)
+  const isProcessingRef = useRef(false)
+  const currentUtteranceRef = useRef(null)
   
   // Camera consent & calibration states
   const [showCameraConsent, setShowCameraConsent] = useState(true)
@@ -38,6 +53,150 @@ export default function InterviewScreen() {
   const chatEndRef = useRef(null)
   const videoPreviewRef = useRef(null)
   const videoLiveRef = useRef(null)
+
+  // Initialize Speech Recognition (STT) with continuous mode
+  useEffect(() => {
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+      const recognition = new SpeechRecognition()
+      
+      recognition.continuous = true // Continuous listening
+      recognition.interimResults = true
+      recognition.lang = 'en-US'
+      recognition.maxAlternatives = 1
+      
+      recognition.onstart = () => {
+        setIsListening(true)
+        console.log('🎤 Continuous listening started')
+      }
+      
+      recognition.onresult = (event) => {
+        let interim = ''
+        let final = ''
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcriptText = event.results[i][0].transcript
+          if (event.results[i].isFinal) {
+            final += transcriptText + ' '
+          } else {
+            interim += transcriptText
+          }
+        }
+        
+        if (final && !isProcessingRef.current) {
+          // User finished speaking a sentence
+          console.log('Final transcript:', final)
+          setTranscript(prev => prev + final)
+          setInterimTranscript('')
+          
+          // Clear any existing silence timer
+          if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current)
+          }
+          
+          // Set a timer to detect end of speech (2 seconds of silence)
+          silenceTimerRef.current = setTimeout(() => {
+            const fullTranscript = transcript + final
+            if (fullTranscript.trim() && !isProcessingRef.current) {
+              handleAutoSend(fullTranscript.trim())
+            }
+          }, 3000) // Increased to 3 seconds for more natural pausing
+        } else {
+          setInterimTranscript(interim)
+        }
+      }
+      
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error)
+        if (event.error === 'no-speech') {
+          // Restart if no speech detected
+          if (isConversationMode && !isSpeaking) {
+            setTimeout(() => {
+              try {
+                recognition.start()
+              } catch (e) {
+                console.log('Recognition already started')
+              }
+            }, 100)
+          }
+        }
+      }
+      
+      recognition.onend = () => {
+        console.log('Recognition ended')
+        // Auto-restart if in conversation mode and AI is not speaking
+        if (isConversationMode && !isSpeaking && !isProcessingRef.current) {
+          setTimeout(() => {
+            try {
+              recognition.start()
+              console.log('🔄 Auto-restarting recognition')
+            } catch (e) {
+              console.log('Recognition already started')
+            }
+          }, 100)
+        } else {
+          setIsListening(false)
+        }
+      }
+      
+      recognitionRef.current = recognition
+    } else {
+      console.warn('Speech recognition not supported in this browser')
+    }
+    
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort()
+      }
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current)
+      }
+    }
+  }, [])
+
+  // Start/Stop conversation mode
+  useEffect(() => {
+    if (isConversationMode && !showCameraConsent && recognitionRef.current) {
+      // Start continuous listening when conversation mode is on
+      if (!isSpeaking) {
+        try {
+          recognitionRef.current.start()
+          console.log('🎤 Starting conversation mode')
+        } catch (e) {
+          console.log('Recognition already active')
+        }
+      }
+    } else if (!isConversationMode && recognitionRef.current) {
+      // Stop listening when conversation mode is off
+      try {
+        recognitionRef.current.stop()
+        setIsListening(false)
+      } catch (e) {
+        console.log('Recognition already stopped')
+      }
+    }
+  }, [isConversationMode, showCameraConsent])
+
+  // Stop listening when AI speaks, resume when done
+  useEffect(() => {
+    if (isSpeaking && recognitionRef.current && isConversationMode) {
+      try {
+        recognitionRef.current.stop()
+        console.log('🔇 Pausing listening while AI speaks')
+      } catch (e) {
+        console.log('Recognition already stopped')
+      }
+    } else if (!isSpeaking && recognitionRef.current && isConversationMode && !showCameraConsent) {
+      setTimeout(() => {
+        try {
+          recognitionRef.current.start()
+          console.log('🎤 Resuming listening after AI finished')
+        } catch (e) {
+          console.log('Recognition already active')
+        }
+      }, 500) // Small delay after AI finishes
+    }
+  }, [isSpeaking, isConversationMode, showCameraConsent])
 
   
   // Interview rounds - system-controlled
@@ -75,6 +234,50 @@ export default function InterviewScreen() {
       ]
     }
   ]
+
+  // Start/Stop conversation mode
+  useEffect(() => {
+    if (isConversationMode && !showCameraConsent && recognitionRef.current) {
+      // Start continuous listening when conversation mode is on
+      if (!isSpeaking) {
+        try {
+          recognitionRef.current.start()
+          console.log('🎤 Starting conversation mode')
+        } catch (e) {
+          console.log('Recognition already active')
+        }
+      }
+    } else if (!isConversationMode && recognitionRef.current) {
+      // Stop listening when conversation mode is off
+      try {
+        recognitionRef.current.stop()
+        setIsListening(false)
+      } catch (e) {
+        console.log('Recognition already stopped')
+      }
+    }
+  }, [isConversationMode, showCameraConsent])
+
+  // Stop listening when AI speaks, resume when done
+  useEffect(() => {
+    if (isSpeaking && recognitionRef.current && isConversationMode) {
+      try {
+        recognitionRef.current.stop()
+        console.log('🔇 Pausing listening while AI speaks')
+      } catch (e) {
+        console.log('Recognition already stopped')
+      }
+    } else if (!isSpeaking && recognitionRef.current && isConversationMode && !showCameraConsent) {
+      setTimeout(() => {
+        try {
+          recognitionRef.current.start()
+          console.log('🎤 Resuming listening after AI finished')
+        } catch (e) {
+          console.log('Recognition already active')
+        }
+      }, 500) // Small delay after AI finishes
+    }
+  }, [isSpeaking, isConversationMode, showCameraConsent])
 
   useEffect(() => {
     const savedConfig = localStorage.getItem('interviewConfig')
@@ -286,6 +489,11 @@ export default function InterviewScreen() {
       if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop())
       }
+      // Cleanup speech
+      window.speechSynthesis.cancel()
+      if (recognitionRef.current) {
+        recognitionRef.current.abort()
+      }
     }
   }, [mediaStream])
 
@@ -293,29 +501,128 @@ export default function InterviewScreen() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatMessages])
 
-  const addAIMessage = (message) => {
-    setChatMessages(prev => [...prev, {
-      type: 'ai',
-      message,
-      timestamp: new Date().toISOString()
-    }])
+  // Text-to-Speech function with improved natural voice
+  const speakText = (text) => {
+    if (!isTTSEnabled || isMuted) return
+    
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel()
+    
+    const utterance = new SpeechSynthesisUtterance(text)
+    
+    // Enhanced configuration for more human-like speech
+    utterance.rate = 0.9 // Slower, more deliberate (realistic interview pace)
+    utterance.pitch = 1.0 // Natural pitch
+    utterance.volume = 1.0
+    
+    // Try to get a high-quality voice
+    const voices = window.speechSynthesis.getVoices()
+    
+    // Prefer these voices for better quality (in order of preference)
+    const preferredVoices = [
+      'Google US English',
+      'Microsoft Zira - English (United States)',
+      'Microsoft David - English (United States)',
+      'Samantha',
+      'Alex',
+      'Google UK English Female',
+      'Google UK English Male',
+      'Microsoft Mark - English (United States)'
+    ]
+    
+    let selectedVoice = voices.find(voice => 
+      preferredVoices.some(preferred => voice.name.includes(preferred))
+    )
+    
+    // Fallback to any English voice
+    if (!selectedVoice) {
+      selectedVoice = voices.find(voice => voice.lang.startsWith('en'))
+    }
+    
+    if (selectedVoice) {
+      utterance.voice = selectedVoice
+    }
+    
+    utterance.onstart = () => {
+      setIsSpeaking(true)
+      console.log('🗣️ AI speaking:', text.substring(0, 50) + '...')
+    }
+    
+    utterance.onend = () => {
+      setIsSpeaking(false)
+      currentUtteranceRef.current = null
+      console.log('✅ AI finished speaking')
+    }
+    
+    utterance.onerror = (event) => {
+      console.error('Speech synthesis error:', event)
+      setIsSpeaking(false)
+      currentUtteranceRef.current = null
+    }
+    
+    currentUtteranceRef.current = utterance
+    window.speechSynthesis.speak(utterance)
   }
 
-  const addUserMessage = (message) => {
-    setChatMessages(prev => [...prev, {
-      type: 'user',
-      message,
-      timestamp: new Date().toISOString()
-    }])
+  // Auto-send message when user stops speaking
+  const handleAutoSend = async (text) => {
+    if (!text.trim() || isProcessingRef.current) return
+    
+    isProcessingRef.current = true
+    setIsWaitingForAI(true)
+    console.log('📤 Auto-sending:', text)
+    
+    // Clear transcripts
+    setTranscript('')
+    setInterimTranscript('')
+    
+    // Stop speech when user sends message
+    window.speechSynthesis.cancel()
+    setIsSpeaking(false)
+    
+    addUserMessage(text)
+    
+    // Add thinking delay for realism (1.5-3 seconds)
+    const thinkingDelay = 1500 + Math.random() * 1500
+    await new Promise(resolve => setTimeout(resolve, thinkingDelay))
+    
+    try {
+      // Call Gemini AI to generate next question
+      const response = await fetch('http://localhost:8000/api/interview/ai/question/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          conversation_history: chatMessages,
+          user_profile: config,
+          current_round: interviewRounds[currentRound].name,
+          previous_answer: text
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (data.success && data.question) {
+        // Natural pause before asking next question
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        addAIMessage(data.question)
+      } else {
+        // Fallback to predefined questions
+        handleStaticQuestionFlow()
+      }
+    } catch (error) {
+      console.error('Error fetching AI question:', error)
+      // Fallback to predefined questions
+      handleStaticQuestionFlow()
+    } finally {
+      setIsWaitingForAI(false)
+      isProcessingRef.current = false
+    }
   }
-
-  const handleSendMessage = () => {
-    if (!userInput.trim()) return
-    
-    addUserMessage(userInput)
-    setUserInput('')
-    
-    // Simulate AI response with round progression
+  
+  // Fallback static question flow
+  const handleStaticQuestionFlow = () => {
     setTimeout(() => {
       const currentRoundData = interviewRounds[currentRound]
       
@@ -329,23 +636,65 @@ export default function InterviewScreen() {
         addAIMessage(`Great work! Let's move to Round ${currentRound + 2}: ${interviewRounds[currentRound + 1].name}`)
         setTimeout(() => {
           addAIMessage(interviewRounds[currentRound + 1].questions[0])
-        }, 1500)
+        }, 2000)
       } else {
         addAIMessage("Excellent! That completes all rounds of the interview. Thank you for your time!")
       }
-    }, 2000)
+    }, 1500)
   }
 
-  const handleEndInterview = async () => {
-    console.log('🛑 Ending interview...')
+  const addAIMessage = (message) => {
+    setChatMessages(prev => [...prev, {
+      type: 'ai',
+      message,
+      timestamp: new Date().toISOString()
+    }])
     
-    // Stop recording and wait for it to finalize
-    await stopRecording()
+    // Speak the AI message
+    speakText(message)
+  }
+
+  const addUserMessage = (message) => {
+    setChatMessages(prev => [...prev, {
+      type: 'user',
+      message,
+      timestamp: new Date().toISOString()
+    }])
+  }
+
+  // Manual send (for typing)
+  const handleSendMessage = () => {
+    if (!userInput.trim()) return
     
-    // Wait a moment for the onstop event to process
-    await new Promise(resolve => setTimeout(resolve, 500))
+    handleAutoSend(userInput)
+    setUserInput('')
+  }
+
+  const handleEndInterview = () => {
+    // Stop all speech IMMEDIATELY
+    if (currentUtteranceRef.current) {
+      currentUtteranceRef.current.onend = null // Prevent callbacks
+      currentUtteranceRef.current.onerror = null
+    }
+    window.speechSynthesis.cancel()
+    setIsSpeaking(false)
+    setIsTTSEnabled(false) // Disable TTS completely
     
-    console.log(`📊 Chunks captured: ${recordedChunksRef.current.length}`)
+    // Stop recognition
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort()
+      } catch (e) {
+        console.log('Recognition already stopped')
+      }
+    }
+    setIsListening(false)
+    setIsConversationMode(false)
+    
+    // Clear all timers
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current)
+    }
     
     // Save interview data
     const interviewData = {
@@ -377,7 +726,10 @@ export default function InterviewScreen() {
       mediaStream.getTracks().forEach(track => track.stop())
     }
     
-    navigate('/interview-results', { state: { analysisId } })
+    // Small delay to ensure speech is stopped before navigation
+    setTimeout(() => {
+      navigate('/interview-results')
+    }, 100)
   }
 
   const formatTime = (seconds) => {
@@ -626,15 +978,42 @@ export default function InterviewScreen() {
               </div>
 
               <div className="flex items-center gap-2">
+                {/* Mute Button */}
                 <motion.button
-                  onClick={() => setIsRecording(!isRecording)}
+                  onClick={() => {
+                    setIsMuted(!isMuted)
+                    if (!isMuted) {
+                      window.speechSynthesis.cancel()
+                      setIsSpeaking(false)
+                    }
+                  }}
                   className={`p-2 rounded-lg border-2 ${
-                    isRecording ? 'bg-red-500 border-red-600 text-white' : 'bg-white border-black'
+                    isMuted ? 'bg-red-500 border-red-600 text-white' : 'bg-white border-gray-400'
                   }`}
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
+                  title={isMuted ? 'Unmute AI' : 'Mute AI'}
                 >
-                  {isRecording ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+                  {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                </motion.button>
+                
+                {/* TTS Toggle */}
+                <motion.button
+                  onClick={() => {
+                    setIsTTSEnabled(!isTTSEnabled)
+                    if (isTTSEnabled) {
+                      window.speechSynthesis.cancel()
+                      setIsSpeaking(false)
+                    }
+                  }}
+                  className={`p-2 rounded-lg border-2 ${
+                    isTTSEnabled ? 'bg-blue-500 border-blue-600 text-white' : 'bg-gray-200 border-gray-400'
+                  }`}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  title={isTTSEnabled ? 'AI Voice ON' : 'AI Voice OFF'}
+                >
+                  {isTTSEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
                 </motion.button>
                 
                 {/* Camera Active Indicator - No toggle */}
@@ -684,15 +1063,12 @@ export default function InterviewScreen() {
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-auto relative">
+            <div className="flex-1 overflow-hidden relative">
               {activeTab === 'code' && (
                 <div className="h-full">
-                  <textarea
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    className="w-full h-full p-6 font-mono text-lg bg-gray-900 text-green-400 focus:outline-none resize-none"
-                    placeholder="// Write your code here..."
-                    spellCheck="false"
+                  <CodeEditor 
+                    initialCode={code}
+                    onCodeChange={(newCode) => setCode(newCode)}
                   />
                 </div>
               )}
@@ -704,7 +1080,7 @@ export default function InterviewScreen() {
               )}
 
               {/* Small Camera Preview */}
-              <div className="absolute bottom-4 right-4 w-48 h-36">
+              <div className="absolute bottom-4 right-4 w-48 h-36 z-10">
                 <video
                   ref={videoLiveRef}
                   autoPlay
@@ -752,13 +1128,56 @@ export default function InterviewScreen() {
 
             {/* Chat Input */}
             <div className="border-t-4 border-black p-4">
+              {/* Conversation Mode Status */}
+              <div className="mb-3 p-3 bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-400 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {isWaitingForAI ? (
+                      <>
+                        <div className="w-3 h-3 bg-purple-500 rounded-full animate-bounce" />
+                        <span className="text-sm font-bold text-purple-900">🤔 AI is thinking...</span>
+                      </>
+                    ) : isListening ? (
+                      <>
+                        <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+                        <span className="text-sm font-bold text-green-900">🎤 Listening to you...</span>
+                      </>
+                    ) : isSpeaking ? (
+                      <>
+                        <Volume2 className="w-4 h-4 text-blue-600 animate-pulse" />
+                        <span className="text-sm font-bold text-blue-900">🗣️ AI is speaking...</span>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-3 h-3 bg-gray-400 rounded-full" />
+                        <span className="text-sm font-bold text-gray-700">Ready to listen</span>
+                      </>
+                    )}
+                  </div>
+                  <span className="text-xs text-gray-600 font-comic">
+                    {isMuted ? '🔇 Muted' : 'Voice Conversation Mode'}
+                  </span>
+                </div>
+                
+                {/* Live transcript */}
+                {(transcript || interimTranscript) && (
+                  <div className="mt-2 p-2 bg-white rounded border border-gray-300">
+                    <p className="text-sm text-gray-800">
+                      {transcript}
+                      <span className="text-gray-500 italic">{interimTranscript}</span>
+                    </p>
+                  </div>
+                )}
+              </div>
+              
+              {/* Optional text input for manual typing */}
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={userInput}
                   onChange={(e) => setUserInput(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="Type your answer..."
+                  placeholder="Or type your answer here..."
                   className="flex-1 px-4 py-2 border-4 border-black rounded-lg font-comic focus:outline-none focus:ring-4 focus:ring-gray-400"
                 />
                 <motion.button
@@ -774,16 +1193,23 @@ export default function InterviewScreen() {
           </div>
         </div>
 
-        {/* Subtitle Bar */}
+        {/* Subtitle Bar - Live Captions */}
         <div className="bg-black text-white py-3 px-6 border-t-4 border-black">
           <div className="flex items-center gap-3">
-            <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+            {isSpeaking && <Volume2 className="w-4 h-4 text-blue-400 animate-pulse" />}
+            {isListening && !isSpeaking && <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />}
+            {!isSpeaking && !isListening && <div className="w-3 h-3 bg-gray-500 rounded-full" />}
+            
             <p className="font-comic text-sm">
-              {chatMessages.length > 0 
-                ? chatMessages[chatMessages.length - 1].type === 'ai' 
-                  ? chatMessages[chatMessages.length - 1].message 
-                  : "Listening to your response..."
-                : "Waiting for interview to start..."}
+              {isSpeaking && chatMessages.length > 0 && chatMessages[chatMessages.length - 1].type === 'ai'
+                ? `🗣️ AI: ${chatMessages[chatMessages.length - 1].message}`
+                : isListening && (transcript || interimTranscript)
+                ? `🎤 You: ${transcript}${interimTranscript}`
+                : isListening
+                ? "🎤 Listening... (Speak naturally, I'll detect when you're done)"
+                : chatMessages.length > 0
+                ? "Ready to listen to your response..."
+                : "Starting interview..."}
             </p>
           </div>
         </div>
