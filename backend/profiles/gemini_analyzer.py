@@ -506,6 +506,43 @@ Analyze this interview recording with EXTREME ACCURACY. Detect subtle behavioral
     "Work on maintaining eye contact - 45% is below average, suggests nervousness",
     "Prepare specific examples beforehand - answers were too vague and generalized",
     "Slow down and structure responses - current pace is uneven and rushed"
+  ],
+  
+  "technical_analysis": "Based on interview responses and technical questions asked",
+  "technical_accuracy": "Provided basic correct information but lacked depth. Missed key concepts in data structures explanation. Used incorrect terminology for algorithms (45% accuracy).",
+  "technical_accuracy_score": 45,
+  "knowledge_depth": "Surface-level understanding demonstrated. Could explain basics but struggled with advanced concepts. Examples were generic rather than specific. Unable to discuss trade-offs or optimizations.",
+  "missing_concepts": [
+    "Time complexity analysis for common algorithms",
+    "Memory optimization techniques",
+    "Advanced data structure applications",
+    "System design principles",
+    "Scalability considerations"
+  ],
+  "technical_tips": [
+    "Study algorithm time/space complexity with practical examples",
+    "Practice coding problems daily to improve problem-solving speed",
+    "Learn to explain technical concepts with specific real-world examples",
+    "Review fundamental data structures: trees, graphs, hash tables in depth",
+    "Prepare for system design by studying architecture patterns"
+  ],
+  "learning_resources": [
+    {
+      "topic": "Algorithm Complexity",
+      "description": "Master Big O notation and analyze algorithm efficiency"
+    },
+    {
+      "topic": "Data Structures",
+      "description": "Deep dive into advanced structures like tries, heaps, B-trees"
+    },
+    {
+      "topic": "System Design",
+      "description": "Learn scalability patterns and distributed systems basics"
+    },
+    {
+      "topic": "Problem Solving",
+      "description": "Practice LeetCode medium/hard problems with time constraints"
+    }
   ]
 }
 
@@ -520,6 +557,13 @@ Analyze this interview recording with EXTREME ACCURACY. Detect subtle behavioral
 8. Every field MUST be filled - no skipping
 9. Use SPECIFIC numbers and percentages from actual observation
 10. If truly confident performance, score high. If nervous/hesitant, score low (40-60 range)
+
+**OUTPUT FORMAT RULES:**
+- Return ONLY valid JSON - no markdown, no code blocks, no explanations
+- NO trailing commas in objects or arrays
+- ALL keys must be in "double quotes"
+- NO comments (//, /* */)
+- Ensure all braces {{ }} and brackets [ ] are properly closed
 
 Return ONLY the complete JSON object with ALL fields filled."""
         
@@ -549,12 +593,27 @@ Return ONLY the complete JSON object with ALL fields filled."""
         # Extract JSON
         json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
         if json_match:
-            analysis_data = json.loads(json_match.group())
-            print(f"✅ JSON parsed successfully!")
-            print(f"   - Emotion Trend: {analysis_data.get('emotion_trend', 'N/A')[:50]}...")
-            print(f"   - Confidence Score: {analysis_data.get('confidence_score', 'N/A')}")
-            print(f"   - Attention Level: {analysis_data.get('attention_level', 'N/A')}")
-            print(f"   - Suspicion Risk: {analysis_data.get('suspicion_risk', 'N/A')}")
+            json_text = json_match.group()
+            
+            # Additional cleaning for common AI JSON errors
+            # Remove trailing commas before closing braces/brackets
+            json_text = re.sub(r',(\s*[}\]])', r'\1', json_text)
+            # Remove comments (// or /* */)
+            json_text = re.sub(r'//.*?$', '', json_text, flags=re.MULTILINE)
+            json_text = re.sub(r'/\*.*?\*/', '', json_text, flags=re.DOTALL)
+            
+            try:
+                analysis_data = json.loads(json_text)
+                print(f"✅ JSON parsed successfully!")
+                print(f"   - Emotion Trend: {analysis_data.get('emotion_trend', 'N/A')[:50]}...")
+                print(f"   - Confidence Score: {analysis_data.get('confidence_score', 'N/A')}")
+                print(f"   - Attention Level: {analysis_data.get('attention_level', 'N/A')}")
+                print(f"   - Suspicion Risk: {analysis_data.get('suspicion_risk', 'N/A')}")
+            except json.JSONDecodeError as e:
+                print(f"❌ JSON parsing failed: {e}")
+                print(f"📄 Cleaned JSON (first 1000 chars):")
+                print(json_text[:1000])
+                raise Exception(f"Invalid JSON from Gemini: {e}")
         else:
             print("❌ Could not extract JSON from response")
             print(f"Response text: {response_text[:200]}")
@@ -695,6 +754,43 @@ def generate_mock_analysis(participant_count):
             'Reduce slight nervous energy in opening segment for stronger first impression',
             'Include more specific quantitative examples from past project experience',
             'Ask clarifying questions to demonstrate analytical thinking before answering'
+        ],
+        
+        # Technical Analysis
+        'technical_analysis': 'Demonstrated solid technical understanding with room for deeper conceptual knowledge',
+        'technical_accuracy': f'Provided accurate technical explanations with {random.randint(75, 85)}% correctness. Good grasp of fundamentals with minor gaps in advanced concepts.',
+        'technical_accuracy_score': random.randint(75, 85),
+        'knowledge_depth': 'Demonstrated good breadth across topics. Could benefit from deeper exploration of system design patterns and optimization techniques.',
+        'missing_concepts': [
+            'Advanced algorithm optimization strategies',
+            'Distributed system trade-offs',
+            'Memory profiling and performance tuning',
+            'Microservices communication patterns'
+        ],
+        'technical_tips': [
+            'Practice explaining complex algorithms with real-world examples',
+            'Study time/space complexity analysis for common data structures',
+            'Review design patterns and their practical applications',
+            'Work on system design fundamentals: scalability, reliability, performance',
+            'Build projects that demonstrate end-to-end technical implementation'
+        ],
+        'learning_resources': [
+            {
+                'topic': 'Algorithm Design',
+                'description': 'Practice dynamic programming and greedy algorithms with LeetCode'
+            },
+            {
+                'topic': 'System Architecture',
+                'description': 'Study case studies of large-scale distributed systems'
+            },
+            {
+                'topic': 'Code Optimization',
+                'description': 'Learn profiling tools and performance analysis techniques'
+            },
+            {
+                'topic': 'Design Patterns',
+                'description': 'Master common patterns: Singleton, Factory, Observer, Strategy'
+            }
         ],
         
         # Ranking

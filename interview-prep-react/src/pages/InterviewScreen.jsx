@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Code, Palette, MessageCircle, StopCircle, Mic, MicOff, 
-  Video, Camera, Shield, Clock, Send, CheckCircle, AlertCircle, Brain,
+  Video, Camera, Shield, Clock, Send, CheckCircle, AlertCircle, Brain ,
   Volume2, VolumeX, Mic as MicIcon
 } from 'lucide-react'
 import CodeEditor from '../components/CodeEditor'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
 export default function InterviewScreen() {
   const navigate = useNavigate()
@@ -34,6 +36,8 @@ export default function InterviewScreen() {
   const silenceTimerRef = useRef(null)
   const isProcessingRef = useRef(false)
   const currentUtteranceRef = useRef(null)
+  const isRecognitionActiveRef = useRef(false) // Track if recognition is running
+  const shouldStopRecognitionRef = useRef(false) // Flag to stop all restarts
   
   // Camera consent & calibration states
   const [showCameraConsent, setShowCameraConsent] = useState(true)
@@ -49,6 +53,7 @@ export default function InterviewScreen() {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const recordedChunksRef = useRef([]) // Use ref to capture chunks in real-time
+  const isRecordingStoppedRef = useRef(false) // Flag to block chunk capture after stop
   
   const chatEndRef = useRef(null)
   const videoPreviewRef = useRef(null)
@@ -67,6 +72,8 @@ export default function InterviewScreen() {
       
       recognition.onstart = () => {
         setIsListening(true)
+        isRecognitionActiveRef.current = true
+        shouldStopRecognitionRef.current = false // Reset flag when successfully started
         console.log('🎤 Continuous listening started')
       }
       
@@ -108,32 +115,56 @@ export default function InterviewScreen() {
       
       recognition.onerror = (event) => {
         console.error('Speech recognition error:', event.error)
-        if (event.error === 'no-speech') {
-          // Restart if no speech detected
-          if (isConversationMode && !isSpeaking) {
+        isRecognitionActiveRef.current = false
+        
+        // Don't restart on these critical errors - prevents infinite loop
+        if (event.error === 'aborted' || event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          console.log('❌ Speech recognition stopped due to:', event.error)
+          shouldStopRecognitionRef.current = true // STOP ALL RESTARTS
+          setIsListening(false)
+          setIsConversationMode(false) // Disable conversation mode to prevent any restart
+          return
+        }
+        
+        // Only restart on no-speech if allowed
+        if (event.error === 'no-speech' && isConversationMode && !shouldStopRecognitionRef.current) {
+          if (!isSpeaking && !isRecognitionActiveRef.current) {
             setTimeout(() => {
-              try {
-                recognition.start()
-              } catch (e) {
-                console.log('Recognition already started')
+              if (isConversationMode && !shouldStopRecognitionRef.current) {
+                try {
+                  recognition.start()
+                } catch (e) {
+                  console.log('Recognition already started')
+                }
               }
-            }, 100)
+            }, 500)
           }
         }
       }
       
       recognition.onend = () => {
         console.log('Recognition ended')
-        // Auto-restart if in conversation mode and AI is not speaking
-        if (isConversationMode && !isSpeaking && !isProcessingRef.current) {
+        isRecognitionActiveRef.current = false
+        
+        // Check if we should stop all restarts
+        if (shouldStopRecognitionRef.current) {
+          console.log('🛑 Recognition restart disabled')
+          setIsListening(false)
+          return
+        }
+        
+        // Only auto-restart if in conversation mode
+        if (isConversationMode && !isSpeaking && !isProcessingRef.current && !isRecognitionActiveRef.current) {
           setTimeout(() => {
-            try {
-              recognition.start()
-              console.log('🔄 Auto-restarting recognition')
-            } catch (e) {
-              console.log('Recognition already started')
+            if (isConversationMode && !shouldStopRecognitionRef.current) {
+              try {
+                recognition.start()
+                console.log('🔄 Auto-restarting recognition')
+              } catch (e) {
+                console.log('Recognition already started')
+              }
             }
-          }, 100)
+          }, 500)
         } else {
           setIsListening(false)
         }
@@ -170,6 +201,7 @@ export default function InterviewScreen() {
       // Stop listening when conversation mode is off
       try {
         recognitionRef.current.stop()
+        isRecognitionActiveRef.current = false
         setIsListening(false)
       } catch (e) {
         console.log('Recognition already stopped')
@@ -179,22 +211,27 @@ export default function InterviewScreen() {
 
   // Stop listening when AI speaks, resume when done
   useEffect(() => {
+    if (shouldStopRecognitionRef.current) return // Don't do anything if recognition is disabled
+    
     if (isSpeaking && recognitionRef.current && isConversationMode) {
       try {
         recognitionRef.current.stop()
+        isRecognitionActiveRef.current = false
         console.log('🔇 Pausing listening while AI speaks')
       } catch (e) {
         console.log('Recognition already stopped')
       }
-    } else if (!isSpeaking && recognitionRef.current && isConversationMode && !showCameraConsent) {
+    } else if (!isSpeaking && recognitionRef.current && isConversationMode && !showCameraConsent && !isRecognitionActiveRef.current) {
       setTimeout(() => {
-        try {
-          recognitionRef.current.start()
-          console.log('🎤 Resuming listening after AI finished')
-        } catch (e) {
-          console.log('Recognition already active')
+        if (isConversationMode && !shouldStopRecognitionRef.current) {
+          try {
+            recognitionRef.current.start()
+            console.log('🎤 Resuming listening after AI finished')
+          } catch (e) {
+            console.log('Recognition already active')
+          }
         }
-      }, 500) // Small delay after AI finishes
+      }, 500)
     }
   }, [isSpeaking, isConversationMode, showCameraConsent])
 
@@ -347,22 +384,37 @@ export default function InterviewScreen() {
     }
 
     try {
-      // Reset chunks
+      // Reset chunks and flags
       recordedChunksRef.current = []
+      isRecordingStoppedRef.current = false
       
       const options = { mimeType: 'video/webm;codecs=vp8,opus' }
       const recorder = new MediaRecorder(mediaStream, options)
 
-      recorder.ondataavailable = (event) => {
+      const handleDataAvailable = (event) => {
+        // CRITICAL: Check flag first to block all late events
+        if (isRecordingStoppedRef.current) {
+          console.log('🚫 Ignoring late chunk event (recording already stopped)')
+          return
+        }
+        
         if (event.data && event.data.size > 0) {
-          recordedChunksRef.current.push(event.data)
-          console.log(`📹 Captured chunk: ${event.data.size} bytes (total: ${recordedChunksRef.current.length} chunks)`)
+          // Only add chunk if recorder is still recording AND flag not set
+          if (recorder.state === 'recording' && !isRecordingStoppedRef.current) {
+            recordedChunksRef.current.push(event.data)
+            console.log(`📹 Captured chunk: ${event.data.size} bytes (total: ${recordedChunksRef.current.length} chunks)`)
+          }
         }
       }
 
+      recorder.ondataavailable = handleDataAvailable
+
       recorder.onstop = () => {
         console.log(`✅ Recording stopped. Total chunks: ${recordedChunksRef.current.length}`)
+        // Clear the handler to prevent any more chunks
+        recorder.ondataavailable = null
         setRecordedChunks(recordedChunksRef.current)
+        setIsRecording(false)
       }
 
       recorder.start(1000) // Capture data every second
@@ -425,8 +477,8 @@ export default function InterviewScreen() {
 
       setUploadProgress(50)
 
-      // Upload to backend
-      const response = await fetch(`${API_URL}/interview/analyze/`, {
+      // Upload recording to backend for video/audio analysis
+      const response = await fetch(`${API_URL}/interview/ai/recording/analyze/`, {
         method: 'POST',
         body: formData,
       })
@@ -555,7 +607,10 @@ export default function InterviewScreen() {
     }
     
     utterance.onerror = (event) => {
-      console.error('Speech synthesis error:', event)
+      // 'interrupted' error is normal when stopping speech, don't log it
+      if (event.error !== 'interrupted') {
+        console.error('Speech synthesis error:', event.error)
+      }
       setIsSpeaking(false)
       currentUtteranceRef.current = null
     }
@@ -623,24 +678,33 @@ export default function InterviewScreen() {
   
   // Fallback static question flow
   const handleStaticQuestionFlow = () => {
-    setTimeout(() => {
-      const currentRoundData = interviewRounds[currentRound]
+    const currentRoundData = interviewRounds[currentRound]
+    
+    // Check if there are more questions in current round
+    if (currentQuestion < currentRoundData.questions.length - 1) {
+      const nextQuestionIndex = currentQuestion + 1
+      setCurrentQuestion(nextQuestionIndex)
       
-      if (currentQuestion < currentRoundData.questions.length - 1) {
-        setCurrentQuestion(prev => prev + 1)
-        addAIMessage(currentRoundData.questions[currentQuestion + 1])
-      } else if (currentRound < interviewRounds.length - 1) {
-        // Move to next round
-        setCurrentRound(prev => prev + 1)
-        setCurrentQuestion(0)
-        addAIMessage(`Great work! Let's move to Round ${currentRound + 2}: ${interviewRounds[currentRound + 1].name}`)
+      setTimeout(() => {
+        addAIMessage(currentRoundData.questions[nextQuestionIndex])
+      }, 1500)
+    } else if (currentRound < interviewRounds.length - 1) {
+      // Move to next round
+      const nextRound = currentRound + 1
+      setCurrentRound(nextRound)
+      setCurrentQuestion(0)
+      
+      setTimeout(() => {
+        addAIMessage(`Great work! Let's move to Round ${nextRound + 1}: ${interviewRounds[nextRound].name}`)
         setTimeout(() => {
-          addAIMessage(interviewRounds[currentRound + 1].questions[0])
+          addAIMessage(interviewRounds[nextRound].questions[0])
         }, 2000)
-      } else {
+      }, 1500)
+    } else {
+      setTimeout(() => {
         addAIMessage("Excellent! That completes all rounds of the interview. Thank you for your time!")
-      }
-    }, 1500)
+      }, 1500)
+    }
   }
 
   const addAIMessage = (message) => {
@@ -671,6 +735,15 @@ export default function InterviewScreen() {
   }
 
   const handleEndInterview = async () => {
+    console.log('🛑 ENDING INTERVIEW - Stopping all systems...')
+    
+    // CRITICAL: Set flag to stop ALL recognition restarts
+    shouldStopRecognitionRef.current = true
+    
+    // Stop conversation mode FIRST to prevent any restarts
+    setIsConversationMode(false)
+    setIsListening(false)
+    
     // Stop all speech IMMEDIATELY
     if (currentUtteranceRef.current) {
       currentUtteranceRef.current.onend = null // Prevent callbacks
@@ -680,16 +753,34 @@ export default function InterviewScreen() {
     setIsSpeaking(false)
     setIsTTSEnabled(false) // Disable TTS completely
     
-    // Stop recognition
+    // Stop recognition completely
     if (recognitionRef.current) {
       try {
         recognitionRef.current.abort()
+        recognitionRef.current.onend = null // Prevent onend from restarting
+        recognitionRef.current.onerror = null // Prevent onerror from restarting
+        isRecognitionActiveRef.current = false
+        console.log('✅ Speech recognition stopped')
       } catch (e) {
         console.log('Recognition already stopped')
       }
     }
-    setIsListening(false)
-    setIsConversationMode(false)
+    
+    // Stop video recording IMMEDIATELY
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      // SET FLAG FIRST to block all future chunk events
+      isRecordingStoppedRef.current = true
+      console.log('🛑 Recording stop initiated - blocking all chunk events')
+      
+      // Remove event handlers to prevent any more chunks
+      mediaRecorder.ondataavailable = null
+      mediaRecorder.onstop = () => {
+        console.log(`✅ Video recording stopped. Final chunks: ${recordedChunksRef.current.length}`)
+        setRecordedChunks(recordedChunksRef.current)
+        setIsRecording(false)
+      }
+      mediaRecorder.stop()
+    }
     
     // Clear all timers
     if (silenceTimerRef.current) {

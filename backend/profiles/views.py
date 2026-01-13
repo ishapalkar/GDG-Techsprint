@@ -422,13 +422,15 @@ def analyze_interview(request):
 @permission_classes([AllowAny])
 def get_interview_analysis(request, analysis_id):
     """
-    GET /api/interview/analysis/<analysis_id>/
+    GET /api/interview/ai/analysis/<analysis_id>/
     
-    Retrieve a specific interview analysis by ID.
+    Retrieve a specific interview analysis by ID with all detailed metrics.
+    The serializer automatically merges raw_ai_response fields into the response.
     """
     try:
         analysis = InterviewAnalysis.objects.get(id=analysis_id)
         serializer = InterviewAnalysisSerializer(analysis)
+        # The serializer's to_representation method already merges raw_ai_response
         return Response(serializer.data, status=status.HTTP_200_OK)
     except InterviewAnalysis.DoesNotExist:
         return Response({

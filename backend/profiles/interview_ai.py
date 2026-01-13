@@ -11,7 +11,7 @@ def generate_interview_question(conversation_history, user_profile, current_roun
     """
     Generate dynamic interview questions based on conversation history and user answers
     """
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
     # Build context from conversation history
     context = f"""You are an expert technical interviewer conducting a {current_round} interview.
@@ -52,7 +52,7 @@ def analyze_answer(question, answer, context):
     """
     Analyze candidate's answer and provide insights
     """
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
     prompt = f"""As an expert interviewer, analyze this candidate's response:
 
@@ -80,7 +80,7 @@ def generate_round_transition(current_round, next_round, performance_summary):
     """
     Generate natural transition between interview rounds
     """
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
     prompt = f"""You are an interviewer transitioning from {current_round} to {next_round}.
 
@@ -105,7 +105,7 @@ def generate_final_message(overall_performance):
     """
     Generate concluding interview message
     """
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
     prompt = f"""As an interviewer concluding the interview, generate a brief closing message (2-3 sentences).
 

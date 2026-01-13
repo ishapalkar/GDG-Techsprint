@@ -46,7 +46,7 @@ export default function InterviewResults() {
   const fetchAIAnalysis = async (analysisId) => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_URL}/interview/analysis/${analysisId}/`)
+      const response = await fetch(`${API_URL}/interview/ai/analysis/${analysisId}/`)
       
       if (response.ok) {
         const data = await response.json()
@@ -539,6 +539,112 @@ export default function InterviewResults() {
               </div>
             </motion.div>
 
+            {/* Technical Answer Analysis Section */}
+            {aiAnalysis.technical_analysis && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 1.1 }}
+                className="card-sketch bg-gradient-to-br from-emerald-50 to-teal-50 p-8 mb-8 border-4 border-emerald-500"
+              >
+                <div className="flex items-center gap-3 mb-6">
+                  <Target className="w-8 h-8 text-emerald-600" />
+                  <h2 className="text-3xl font-hand font-bold text-gray-900">Technical Answer Analysis</h2>
+                </div>
+
+                <div className="space-y-6">
+                  {/* Technical Accuracy */}
+                  {aiAnalysis.technical_accuracy && (
+                    <div className="bg-white p-6 rounded-lg border-2 border-emerald-300">
+                      <h3 className="font-bold text-xl mb-3 text-emerald-700 flex items-center gap-2">
+                        <ThumbsUp className="w-5 h-5" />
+                        Technical Accuracy
+                      </h3>
+                      <div className="flex items-center gap-4 mb-4">
+                        <div className="text-5xl font-hand font-bold text-emerald-600">
+                          {aiAnalysis.technical_accuracy_score || 'N/A'}
+                          <span className="text-2xl text-gray-600">/100</span>
+                        </div>
+                        <div className="flex-1">
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div
+                              className="bg-emerald-600 h-3 rounded-full transition-all duration-1000"
+                              style={{ width: `${aiAnalysis.technical_accuracy_score || 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <p className="font-comic text-gray-700">
+                        {aiAnalysis.technical_accuracy}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Depth of Knowledge */}
+                  {aiAnalysis.knowledge_depth && (
+                    <div className="bg-white p-6 rounded-lg border-2 border-emerald-300">
+                      <h3 className="font-bold text-xl mb-3 text-emerald-700 flex items-center gap-2">
+                        <Brain className="w-5 h-5" />
+                        Depth of Knowledge
+                      </h3>
+                      <p className="font-comic text-gray-700 mb-4">
+                        {aiAnalysis.knowledge_depth}
+                      </p>
+                      {aiAnalysis.missing_concepts && aiAnalysis.missing_concepts.length > 0 && (
+                        <div className="mt-4 p-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg">
+                          <p className="font-bold text-sm text-yellow-800 mb-2">⚠️ Missing Key Concepts:</p>
+                          <ul className="list-disc list-inside space-y-1">
+                            {aiAnalysis.missing_concepts.map((concept, idx) => (
+                              <li key={idx} className="font-comic text-sm text-yellow-700">{concept}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Improvement Tips */}
+                  {aiAnalysis.technical_tips && aiAnalysis.technical_tips.length > 0 && (
+                    <div className="bg-white p-6 rounded-lg border-2 border-emerald-300">
+                      <h3 className="font-bold text-xl mb-4 text-emerald-700 flex items-center gap-2">
+                        <Lightbulb className="w-5 h-5" />
+                        Tips to Improve Technical Answers
+                      </h3>
+                      <div className="space-y-3">
+                        {aiAnalysis.technical_tips.map((tip, idx) => (
+                          <div key={idx} className="flex gap-3 p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                            <div className="flex-shrink-0">
+                              <span className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-600 text-white font-bold">
+                                {idx + 1}
+                              </span>
+                            </div>
+                            <p className="font-comic text-gray-700 flex-1">{tip}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Suggested Learning Resources */}
+                  {aiAnalysis.learning_resources && aiAnalysis.learning_resources.length > 0 && (
+                    <div className="bg-gradient-to-r from-emerald-100 to-teal-100 p-6 rounded-lg border-2 border-emerald-400">
+                      <h3 className="font-bold text-xl mb-4 text-emerald-800 flex items-center gap-2">
+                        📚 Recommended Learning Resources
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {aiAnalysis.learning_resources.map((resource, idx) => (
+                          <div key={idx} className="bg-white p-4 rounded-lg border border-emerald-300">
+                            <p className="font-comic text-gray-800 font-bold text-sm mb-1">{resource.topic}</p>
+                            <p className="font-comic text-gray-600 text-xs">{resource.description}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
             {/* Detailed Eye Movement Breakdown */}
             {aiAnalysis.eye_movement_breakdown && (
               <motion.div
@@ -594,22 +700,22 @@ export default function InterviewResults() {
               </div>
 
               {/* Risk Score Display */}
-              {aiAnalysis.cheating_risk_score !== undefined && (
+              {(aiAnalysis.cheating_risk_score !== undefined && aiAnalysis.cheating_risk_score !== null) && (
                 <div className="bg-white p-6 rounded-lg border-2 border-orange-300 mb-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="font-bold text-lg text-gray-900">Integrity Risk Score</h3>
                     <div className="text-5xl font-hand font-bold text-orange-600">
-                      {aiAnalysis.cheating_risk_score}<span className="text-2xl text-gray-600">/100</span>
+                      {aiAnalysis.cheating_risk_score || 0}<span className="text-2xl text-gray-600">/100</span>
                     </div>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-4">
                     <div
                       className={`h-4 rounded-full transition-all duration-1000 ${
-                        aiAnalysis.cheating_risk_score < 25 ? 'bg-green-500' :
-                        aiAnalysis.cheating_risk_score < 50 ? 'bg-yellow-500' :
+                        (aiAnalysis.cheating_risk_score || 0) < 25 ? 'bg-green-500' :
+                        (aiAnalysis.cheating_risk_score || 0) < 50 ? 'bg-yellow-500' :
                         'bg-red-500'
                       }`}
-                      style={{ width: `${aiAnalysis.cheating_risk_score}%` }}
+                      style={{ width: `${Math.max(aiAnalysis.cheating_risk_score || 0, 2)}%` }}
                     />
                   </div>
                   <p className="text-xs text-gray-600 mt-2">
@@ -618,13 +724,6 @@ export default function InterviewResults() {
                 </div>
               )}
 
-              <div className="bg-yellow-100 border-2 border-yellow-500 rounded-lg p-4 mb-6 flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-yellow-700 mt-1 flex-shrink-0" />
-                <p className="text-sm font-comic text-gray-800">
-                  <strong>Disclaimer:</strong> These are behavioral observations only and should not be used as the sole basis for hiring decisions. 
-                  Integrity indicators are probabilistic, not deterministic.
-                </p>
-              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white p-6 rounded-lg border-2 border-orange-300">

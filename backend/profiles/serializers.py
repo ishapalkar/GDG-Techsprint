@@ -16,6 +16,7 @@ class InterviewAnalysisSerializer(serializers.ModelSerializer):
     class Meta:
         model = InterviewAnalysis
         fields = '__all__'
+        read_only_fields = ('user', 'analyzed_at')
     
     def to_representation(self, instance):
         """Merge raw_ai_response fields into the top level for easy frontend access"""
@@ -26,7 +27,6 @@ class InterviewAnalysisSerializer(serializers.ModelSerializer):
             data.update(instance.raw_ai_response)
         
         return data
-        read_only_fields = ('user', 'analyzed_at')
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
