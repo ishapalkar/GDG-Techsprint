@@ -2,6 +2,7 @@ import os
 import json
 import google.generativeai as genai
 from dotenv import load_dotenv
+import vertexai
 
 # Load environment variables
 load_dotenv()
@@ -15,7 +16,7 @@ GCP_LOCATION = os.getenv('GCP_LOCATION', 'us-central1')
 if USE_VERTEX_AI:
     print(f"🔵 Using Vertex AI (Project: {GCP_PROJECT_ID}, Location: {GCP_LOCATION})")
     try:
-        import vertexai
+
         vertexai.init(project=GCP_PROJECT_ID, location=GCP_LOCATION)
     except ImportError:
         print("❌ vertexai package not installed. Run: pip install google-cloud-aiplatform")

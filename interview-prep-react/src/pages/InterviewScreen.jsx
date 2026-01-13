@@ -642,8 +642,8 @@ export default function InterviewScreen() {
     await new Promise(resolve => setTimeout(resolve, thinkingDelay))
     
     try {
-      // Call Gemini AI to generate next question
-      const response = await fetch('http://localhost:8000/api/interview/ai/question/', {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+      const response = await fetch(`${API_URL}/interview/ai/question/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

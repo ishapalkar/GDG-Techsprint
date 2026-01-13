@@ -6,6 +6,8 @@ import Navbar from '../components/Navbar'
 import axios from 'axios'
 import { auth } from '../firebase/config'
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+
 export default function InterviewSetup() {
   const navigate = useNavigate()
   const [step, setStep] = useState(1)
@@ -35,7 +37,7 @@ export default function InterviewSetup() {
         return
       }
 
-      const response = await axios.get(`http://localhost:8000/api/recommendations/`, {
+      const response = await axios.get(`${API_URL}/recommendations/`, {
         params: { uid: user.uid }
       })
 
@@ -144,7 +146,7 @@ export default function InterviewSetup() {
       }
 
       // Generate questions using AI
-      const response = await axios.post(`http://localhost:8000/api/questions/generate/`, {
+      const response = await axios.post(`${API_URL}/questions/generate/`, {
         uid: user.uid,
         goal: config.goal,
         level: config.level,
