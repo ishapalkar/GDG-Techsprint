@@ -9,4 +9,4 @@ export PIP_ONLY_BINARY=:all:
 
 pip install -r requirements.txt
 
-python backend/manage.py collectstatic --noinput
+python manage.py collectstatic --noinput
